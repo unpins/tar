@@ -17,12 +17,23 @@
     unpins-lib.lib.mkStandaloneFlake {
       inherit self;
       name = "tar";
-      windows = true;
       build = pkgs:
         pkgs.pkgsStatic.libarchive.overrideAttrs (old: {
           postInstall = (old.postInstall or "") + ''
             mv "$out/bin/bsdtar" "$out/bin/tar"
             find "$out/bin" -type f -not -name tar -delete
+          '';
+        });
+      # Same shape as native (libarchive's bsdtar renamed to tar). Imports
+      # stay system-only (bcrypt/KERNEL32/msvcrt); mingwStaticCross's stdenv
+      # adapter handles --enable-static --disable-shared for libarchive + its
+      # deps (zlib, xz, bzip2, zstd, openssl, lzo).
+      windowsBuild = pkgs:
+        let cross = unpins-lib.lib.mingwStaticCross pkgs; in
+        cross.libarchive.overrideAttrs (old: {
+          postInstall = (old.postInstall or "") + ''
+            mv "$out/bin/bsdtar.exe" "$out/bin/tar.exe"
+            find "$out/bin" -type f -not -name "tar.exe" -delete
           '';
         });
     };
