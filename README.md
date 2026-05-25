@@ -47,3 +47,23 @@ The first invocation will offer to add the [unpins.cachix.org](https://unpins.ca
 ## Manual download
 
 The [Releases](https://github.com/unpins/tar/releases) page has standalone binaries and a `.tar.zst` data archive (man pages and completions) for manual download.
+
+## Build notes
+
+### Embedded resources
+
+None. All compression and crypto code is statically linked into the binary as compiled libraries; there are no runtime data files.
+
+### Crypto backend per platform
+
+libarchive uses crypto for hash verification (mtree/xar SHA digests) and for AES-encrypted ZIP/7z entries. Each platform picks the lightest source that supports those primitives:
+
+- **Linux** — `mbedcrypto.a` (from mbedTLS). Replaces OpenSSL, which would otherwise drag the full provider stack (legacy + post-quantum ML-DSA/SLH-DSA) for a few SHA/AES symbols. Net effect: ~5.8 MB smaller binary, identical user-facing features.
+- **macOS** — `LIBSYSTEM` (CommonCrypto / `<CommonCrypto/CommonDigest.h>`). System framework, no extra linkage.
+- **Windows** — `WIN` backend (`bcrypt.dll`, the CNG API). System DLL, no extra linkage.
+
+AES-256 encrypted ZIP extraction (`tar -xf foo.zip --passphrase=…`), encrypted 7z, and `--options=sha256digest` for mtree all work identically on every target.
+
+### Excluded format
+
+- **XAR** is disabled (`xarSupport = false`). XAR is Apple's legacy `.pkg` format; it requires `libxml2` (~1 MB statically), and almost no one creates XAR archives outside the macOS Installer toolchain. Reading or writing `.xar` files fails with "Unrecognized archive format". Everything else libarchive supports — POSIX/PAX/USTAR/GNU tar, gzip/xz/bzip2/zstd, ZIP, 7z, cpio, ISO9660, MTREE, RAR/RAR5 (read), LHA, AR, WARC — still works.
