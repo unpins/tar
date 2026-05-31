@@ -26,9 +26,33 @@
   # `xarSupport=false` drops libxml2 (XAR is Apple .pkg legacy). Real
   # tar workflows don't touch XAR.
   outputs = { self, unpins-lib }:
+    let
+      pkgsX = unpins-lib.inputs.nixpkgs.legacyPackages.x86_64-linux;
+
+      # Curated man set for the bsdtar binary we ship as `tar`:
+      #   * bsdtar.1 → tar.1  — the command manual, renamed to match our binary
+      #     so `unpin man tar` resolves to it. (Without the rename, the lookup
+      #     for "tar" finds the lower-numbered-section-wins `tar.5` archive
+      #     *format* page instead of the command manual.)
+      #   * tar.5, libarchive-formats.5  — the two format pages bsdtar.1's
+      #     SEE ALSO cites (and the only ones a tar user consults).
+      # Drops libarchive's 34 archive_*.3 / libarchive*.3 C-library API pages
+      # and the bsdcat/bsdcpio/bsdunzip.1 pages for the sibling tools we delete.
+      # The windows .exe ships no man of its own, and there is no nixpkgs `tar`
+      # attr for the default graft to find (it's `gnutar`/`libarchive`), so we
+      # graft this exact set — same pages native embeds → parity.
+      winMan = pkgsX.runCommand "tar-win-man" { } ''
+        mkdir -p "$out/share/man/man1" "$out/share/man/man5"
+        zcat ${pkgsX.libarchive}/share/man/man1/bsdtar.1.gz > "$out/share/man/man1/tar.1"
+        zcat ${pkgsX.libarchive}/share/man/man5/tar.5.gz > "$out/share/man/man5/tar.5"
+        zcat ${pkgsX.libarchive}/share/man/man5/libarchive-formats.5.gz \
+          > "$out/share/man/man5/libarchive-formats.5"
+      '';
+    in
     unpins-lib.lib.mkStandaloneFlake {
       inherit self;
       name = "tar";
+      winManRoot = winMan;
       build = pkgs:
         (pkgs.pkgsStatic.libarchive.override { xarSupport = false; }).overrideAttrs (old: {
           buildInputs = (old.buildInputs or [ ])
@@ -40,6 +64,16 @@
           postInstall = (old.postInstall or "") + ''
             mv "$out/bin/bsdtar" "$out/bin/tar"
             find "$out/bin" -type f -not -name tar -delete
+            # Curate man to the tar CLI set (see winMan note). withMan harvests
+            # $out/share/man, and man is uncompressed at postInstall (compress
+            # runs later in fixupPhase), so rename + prune the raw pages here.
+            mv "$out/share/man/man1/bsdtar.1" "$out/share/man/man1/tar.1"
+            find "$out/share/man" -type f \
+              ! -path '*/man1/tar.1' \
+              ! -path '*/man5/tar.5' \
+              ! -path '*/man5/libarchive-formats.5' \
+              -delete
+            find "$out/share/man" -type d -empty -delete
           '';
         });
       windowsBuild = pkgs:

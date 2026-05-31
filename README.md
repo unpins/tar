@@ -46,13 +46,17 @@ The first invocation will offer to add the [unpins.cachix.org](https://unpins.ca
 
 ## Manual download
 
-The [Releases](https://github.com/unpins/tar/releases) page has standalone binaries and a `.tar.zst` data archive (man pages and completions) for manual download.
+The [Releases](https://github.com/unpins/tar/releases) page has standalone binaries for manual download.
+
+## Man pages
+
+`tar.1` (the bsdtar command manual), `tar.5`, and `libarchive-formats.5` are embedded in the binary — read them with `unpin man tar`. libarchive's C-library API pages (`archive_*.3`) and the man pages for the sibling tools it normally installs (`bsdcat`/`bsdcpio`/`bsdunzip`, which we don't ship) are dropped.
 
 ## Build notes
 
 ### Embedded resources
 
-None. All compression and crypto code is statically linked into the binary as compiled libraries; there are no runtime data files.
+All compression and crypto code is statically linked into the binary as compiled libraries; there are no runtime data files. The man pages above ride inside the binary (no companion archive).
 
 ### Crypto backend per platform
 
