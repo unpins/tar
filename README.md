@@ -15,18 +15,18 @@ GNU tar (`gnutar`) handles compressed archives by forking to external `gzip` / `
 
 The CLI is compatible for everyday use (`-c`, `-x`, `-t`, `-z`, `-j`, `-J`, `--zstd`, …). For GNU-tar-specific flags (`--owner=`, `--no-same-owner`, etc.) consult `man bsdtar`.
 
-## Installation
+## Usage
 
-Install with [unpin](https://github.com/unpins/unpin):
+Run the `tar` program with [unpin](https://github.com/unpins/unpin):
 
 ```bash
-unpin tar
+unpin tar -czf archive.tar.gz dir/
 ```
 
-Or run without installing:
+To install it onto your PATH:
 
 ```bash
-unpin run tar
+unpin install tar
 ```
 
 ## Build locally
