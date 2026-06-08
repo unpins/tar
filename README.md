@@ -1,13 +1,13 @@
 # tar
 
-Standalone build of [tar](https://www.libarchive.org/) — specifically `bsdtar` from libarchive, not GNU tar.
+[tar](https://www.libarchive.org/) — specifically `bsdtar` from libarchive, not GNU tar. A single self-contained binary, built natively for Linux, macOS, and Windows.
 
 [![CI](https://github.com/unpins/tar/actions/workflows/tar.yml/badge.svg)](https://github.com/unpins/tar/actions)
 ![Linux](https://img.shields.io/badge/Linux-✓-success?logo=linux&logoColor=white)
 ![macOS](https://img.shields.io/badge/macOS-✓-success?logo=apple&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-✓-success?logo=windows&logoColor=white)
 
-Part of the [unpins](https://unpins.org) project — native single-binary builds with no third-party runtime dependencies.
+Part of the [unpins](https://unpins.org) catalog; install it with [`unpin`](https://github.com/unpins/unpin): `unpin install tar`.
 
 ## Why bsdtar instead of GNU tar?
 
@@ -29,6 +29,10 @@ To install it onto your PATH:
 unpin install tar
 ```
 
+## Man pages
+
+`tar.1` (the bsdtar command manual), `tar.5`, and `libarchive-formats.5` are embedded in the binary — read them with `unpin man tar`. libarchive's C-library API pages (`archive_*.3`) and the man pages for the sibling tools it normally installs (`bsdcat`/`bsdcpio`/`bsdunzip`, which we don't ship) are dropped.
+
 ## Build locally
 
 ```bash
@@ -47,10 +51,6 @@ The first invocation will offer to add the [unpins.cachix.org](https://unpins.ca
 ## Manual download
 
 The [Releases](https://github.com/unpins/tar/releases) page has standalone binaries for manual download.
-
-## Man pages
-
-`tar.1` (the bsdtar command manual), `tar.5`, and `libarchive-formats.5` are embedded in the binary — read them with `unpin man tar`. libarchive's C-library API pages (`archive_*.3`) and the man pages for the sibling tools it normally installs (`bsdcat`/`bsdcpio`/`bsdunzip`, which we don't ship) are dropped.
 
 ## Build notes
 
