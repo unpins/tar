@@ -1,5 +1,5 @@
 {
-  description = "Standalone build of tar (bsdtar from libarchive)";
+  description = "tar (bsdtar from libarchive) as a single self-contained binary";
 
   nixConfig = {
     extra-substituters = [ "https://unpins.cachix.org" ];
