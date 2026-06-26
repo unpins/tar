@@ -54,29 +54,85 @@
     unpins-lib.lib.mkStandaloneFlake {
       inherit self;
       name = "tar";
+
+      # Build via the unpin-llvm engine + emit a bitcode multicall module.
+      # The binary is linked as `bsdtar` (libarchive's frontend) and only
+      # renamed to `tar` in postInstall, so the capture sidecar — and thus the
+      # program entry — is keyed on `bsdtar`; `tar` rides along as the alias.
+      engine = "unpin-llvm";
+      multicall = {
+        programs = [{ name = "bsdtar"; aliases = [ "tar" ]; }];
+      };
+      # Upstream nixpkgs attr is `libarchive`; name it so the engine's stdenv
+      # override targets the attr `build` actually uses.
+      pkgsAttr = "libarchive";
       build = pkgs:
+        let
+          isLinux = pkgs.stdenv.hostPlatform.isLinux;
+          noOpenssl = pkgs.lib.filter
+            (d: !(pkgs.lib.hasInfix "openssl" (d.name or "")));
+        in
         (pkgs.pkgsStatic.libarchive.override { xarSupport = false; }).overrideAttrs (old: {
-          buildInputs = (old.buildInputs or [ ])
-            ++ pkgs.lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.pkgsStatic.mbedtls;
-          configureFlags = (old.configureFlags or [ ]) ++ [
-            "--without-openssl"
-            "--with-mbedtls"
-          ];
+          # Crypto backend: mbedtls on LINUX only. mbedtls is libarchive's
+          # optional crypto (encrypted ZIP/7z read, mtree message digests); it is
+          # small and avoids dragging all of OpenSSL in via EVP constructor
+          # self-registration. nixpkgs libarchive keeps openssl as an
+          # unconditional buildInput AND names it in preFixup, so under the engine
+          # cc OpenSSL would otherwise be compiled with -flto (tens of minutes per
+          # arch) for a lib that is never linked — filter it out everywhere and
+          # rewrite preFixup to keep only the lzo .la fixup.
+          #
+          # darwin omits the extra crypto backend (--without-mbedtls): the
+          # nixpkgs-mbedtls + darwin engine-cc combination does not build cleanly
+          # (clang-detected-as-GNU cmake flags, -static-libgcc in the test link, a
+          # threading postConfigure that can't find its script). tar's core —
+          # every archive format and compression — is unaffected; only the niche
+          # encrypted-archive/digest features are unavailable there.
+          buildInputs = (noOpenssl (old.buildInputs or [ ]))
+            ++ pkgs.lib.optional isLinux pkgs.pkgsStatic.mbedtls;
+          propagatedBuildInputs = noOpenssl (old.propagatedBuildInputs or [ ]);
+          configureFlags = (old.configureFlags or [ ]) ++ [ "--without-openssl" ]
+            ++ (if isLinux then [ "--with-mbedtls" ] else [ "--without-mbedtls" ]);
+          preFixup = ''
+            sed -i $lib/lib/libarchive.la \
+              -e 's|-llzo2|-L${pkgs.pkgsStatic.lzo}/lib -llzo2|'
+          '';
           postInstall = (old.postInstall or "") + ''
             mv "$out/bin/bsdtar" "$out/bin/tar"
             find "$out/bin" -type f -not -name tar -delete
           '' + manCurate;
+        } // pkgs.lib.optionalAttrs (!isLinux) {
+          # darwin: libarchive's libtool otherwise builds a libarchive.dylib and
+          # passes -soname, which ld64.lld rejects ("unknown argument '-soname'").
+          # Push --disable-shared via configureFlagsArray — nix-lib strips a plain
+          # --disable-shared from the Nix configureFlags list on darwin (to keep
+          # libSystem dynamic), so the bash array is the way to make it stick.
+          preConfigure = (old.preConfigure or "") + ''
+            configureFlagsArray+=("--disable-shared")
+          '';
         });
       windowsBuild = pkgs:
         let
           cross = unpins-lib.lib.mingwStaticCross pkgs;
           la = cross.libarchive.override { xarSupport = false; };
+          noOpenssl = pkgs.lib.filter
+            (d: !(pkgs.lib.hasInfix "openssl" (d.name or "")));
         in
         la.overrideAttrs (old: {
+          # Drop openssl (never linked under --without-openssl, and otherwise
+          # dragged into the windows mega). No extra crypto backend on windows
+          # either (--without-mbedtls) — same nixpkgs-mbedtls portability story as
+          # darwin; tar's core formats/compression are unaffected.
+          buildInputs = noOpenssl (old.buildInputs or [ ]);
+          propagatedBuildInputs = noOpenssl (old.propagatedBuildInputs or [ ]);
           configureFlags = (old.configureFlags or [ ]) ++ [
             "--without-openssl"
-            "--with-mbedtls"
+            "--without-mbedtls"
           ];
+          preFixup = ''
+            sed -i $lib/lib/libarchive.la \
+              -e 's|-llzo2|-L${cross.lzo}/lib -llzo2|'
+          '';
           postInstall = (old.postInstall or "") + ''
             mv "$out/bin/bsdtar.exe" "$out/bin/tar.exe"
             find "$out/bin" -type f -not -name "tar.exe" -delete
