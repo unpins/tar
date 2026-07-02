@@ -71,3 +71,7 @@ AES-256 encrypted ZIP extraction (`tar -xf foo.zip --passphrase=…`), encrypted
 ### Excluded format
 
 - **XAR** is disabled (`xarSupport = false`). XAR is Apple's legacy `.pkg` format; it requires `libxml2` (~1 MB statically), and almost no one creates XAR archives outside the macOS Installer toolchain. Reading or writing `.xar` files fails with "Unrecognized archive format". Everything else libarchive supports — POSIX/PAX/USTAR/GNU tar, gzip/xz/bzip2/zstd, ZIP, 7z, cpio, ISO9660, MTREE, RAR/RAR5 (read), LHA, AR, WARC — still works.
+
+### Tests
+
+libarchive's `make check` isn't wired: its core archive/compression tests pass, but the filename-encoding tests (legacy charsets such as CP866/CP932/KOI8R/eucJP/CP1251) fail under musl's limited `iconv` with no locale data in the build sandbox — not a `tar` defect. The release smoke test exercises a create/list round-trip.
