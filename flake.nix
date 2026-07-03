@@ -17,11 +17,14 @@
   # Crypto backend: **mbedtls** instead of openssl — policy + the
   # platform-conditional dep are in docs/crypto-backend.md. tar-specific:
   # bsdtar.c never calls crypto directly, but
-  # `archive_read_support_format_all()` registers the xar/mtree/zip/7z
-  # handlers, each referencing `EVP_DigestInit` — constructor self-
-  # registration the linker can't DCE — so static libcrypto.a would drag
-  # all of OpenSSL 3.x. `--with-mbedtls` keeps AES-ZIP read, mtree
-  # sha256digest, and encrypted 7z working at ~500 KB instead of ~4 MB.
+  # `archive_read_support_format_all()` (explicit calls, not ctors — so it IS
+  # DCE-able) registers the xar/mtree/zip/7z handlers, each referencing the
+  # digest/cryptor layer; bsdtar calls format_all, so the crypto members are
+  # pulled in. Backed by static libcrypto.a that would mean all of OpenSSL 3.x;
+  # `--with-mbedtls` keeps AES-ZIP read, mtree sha256digest, and encrypted 7z
+  # working at ~500 KB instead. The details (shared libarchive, and how
+  # e2fsprogs links the same crypto-enabled `.a` without pulling crypto by
+  # registering only format_tar) are on the `build` fn below.
   #
   # `xarSupport=false` drops libxml2 (XAR is Apple .pkg legacy). Real
   # tar workflows don't touch XAR.
@@ -66,55 +69,54 @@
       # Upstream nixpkgs attr is `libarchive`; name it so the engine's stdenv
       # override targets the attr `build` actually uses.
       pkgsAttr = "libarchive";
+      # Crypto backend: **mbedtls on linux** (none on darwin/windows). tar shares
+      # the catalog's one libarchive (lib.unpinLibarchive), built --with-mbedtls
+      # on linux — so bsdtar keeps encrypted-ZIP/7z read + mtree digests at ~500 KB
+      # rather than dragging OpenSSL 3.x's ~4 MB. bsdtar calls
+      # `archive_read_support_format_all()`, which references the zip/7z/mtree
+      # handlers → the digest/cryptor layer → mbedtls, so those crypto members are
+      # pulled into tar. The SAME shared `.a` serves e2fsprogs without dragging
+      # crypto there: format_all is explicit calls (not ctors), so a static `.a`
+      # pulls a crypto member only if referenced, and e2fsprogs is patched to
+      # register only format_tar — it links this exact crypto-enabled libarchive
+      # yet references no crypto member. One shared libarchive, deduped by path in
+      # the mega; tar keeps its crypto, the fs tools stay lean. darwin/windows
+      # omit mbedtls (nixpkgs-mbedtls doesn't cross/darwin-build cleanly under the
+      # engine cc) — core formats + compression are unaffected there.
       build = pkgs:
         let
-          isLinux = pkgs.stdenv.hostPlatform.isLinux;
-          noOpenssl = pkgs.lib.filter
-            (d: !(pkgs.lib.hasInfix "openssl" (d.name or "")));
+          lib = pkgs.lib // unpins-lib.lib;
+          # The catalog's ONE libarchive — the same store derivation e2fsprogs
+          # links. bsdtar is linked against THIS store libarchive.a (below), not
+          # the in-tree copy, so the capture records a STOREA external depArchive
+          # and the mega folds a single shared libarchive rather than baking a
+          # private copy into tar's module.bc.
+          la = lib.unpinLibarchive pkgs;
         in
-        (pkgs.pkgsStatic.libarchive.override { xarSupport = false; }).overrideAttrs (old: {
-          # Skip `make check`: libarchive's core archive/compression tests pass,
-          # but its filename-encoding tests (legacy charsets — CP866/CP932/KOI8R/
-          # eucJP/CP1251/…) fail under musl's limited iconv with no locale data in
-          # the sandbox. Not a tar defect; the affected conversions are niche.
-          doCheck = false;
-          # Crypto backend: mbedtls on LINUX only. mbedtls is libarchive's
-          # optional crypto (encrypted ZIP/7z read, mtree message digests); it is
-          # small and avoids dragging all of OpenSSL in via EVP constructor
-          # self-registration. nixpkgs libarchive keeps openssl as an
-          # unconditional buildInput AND names it in preFixup, so under the engine
-          # cc OpenSSL would otherwise be compiled with -flto (tens of minutes per
-          # arch) for a lib that is never linked — filter it out everywhere and
-          # rewrite preFixup to keep only the lzo .la fixup.
-          #
-          # darwin omits the extra crypto backend (--without-mbedtls): the
-          # nixpkgs-mbedtls + darwin engine-cc combination does not build cleanly
-          # (clang-detected-as-GNU cmake flags, -static-libgcc in the test link, a
-          # threading postConfigure that can't find its script). tar's core —
-          # every archive format and compression — is unaffected; only the niche
-          # encrypted-archive/digest features are unavailable there.
-          buildInputs = (noOpenssl (old.buildInputs or [ ]))
-            ++ pkgs.lib.optional isLinux pkgs.pkgsStatic.mbedtls;
-          propagatedBuildInputs = noOpenssl (old.propagatedBuildInputs or [ ]);
-          configureFlags = (old.configureFlags or [ ]) ++ [ "--without-openssl" ]
-            ++ (if isLinux then [ "--with-mbedtls" ] else [ "--without-mbedtls" ]);
-          preFixup = ''
-            sed -i $lib/lib/libarchive.la \
-              -e 's|-llzo2|-L${pkgs.pkgsStatic.lzo}/lib -llzo2|'
+        la.overrideAttrs (old: {
+          # tar is now a CONSUMER of the shared libarchive (it links its store
+          # `.a`), so name it as a buildInput. That puts `${la.lib}` in tar's
+          # module manifest depInputDirs (multicallExternalDepDirs walks
+          # buildInputs), so the mega resolves libarchive for tar's applet from
+          # the shared copy independently — not only when e2fsprogs happens to be
+          # in the same mega. Deduped by path against every other consumer.
+          buildInputs = (old.buildInputs or [ ]) ++ [ la ];
+          # Redirect bsdtar's link from the in-tree `libarchive.la` (which libtool
+          # resolves to .libs/libarchive.a → LOCALA → internalized per package) to
+          # the shared store `.a`. autoreconfHook regenerates Makefile.in from the
+          # patched Makefile.am, so patch the .am. libarchive_fe.a stays in-tree
+          # (tiny frontend glue, tar-only — nothing to share); the store .la also
+          # carries the transitive compression -l flags, so the link is otherwise
+          # unchanged. (libarchive.a still builds in-tree via lib_LTLIBRARIES but
+          # bsdtar no longer links it.)
+          postPatch = (old.postPatch or "") + ''
+            substituteInPlace Makefile.am \
+              --replace-fail 'bsdtar_LDADD= libarchive.la' 'bsdtar_LDADD= ${la.lib}/lib/libarchive.la'
           '';
           postInstall = (old.postInstall or "") + ''
             mv "$out/bin/bsdtar" "$out/bin/tar"
             find "$out/bin" -type f -not -name tar -delete
           '' + manCurate;
-        } // pkgs.lib.optionalAttrs (!isLinux) {
-          # darwin: libarchive's libtool otherwise builds a libarchive.dylib and
-          # passes -soname, which ld64.lld rejects ("unknown argument '-soname'").
-          # Push --disable-shared via configureFlagsArray — nix-lib strips a plain
-          # --disable-shared from the Nix configureFlags list on darwin (to keep
-          # libSystem dynamic), so the bash array is the way to make it stick.
-          preConfigure = (old.preConfigure or "") + ''
-            configureFlagsArray+=("--disable-shared")
-          '';
         });
       windowsBuild = pkgs:
         let
