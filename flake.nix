@@ -57,6 +57,8 @@
     unpins-lib.lib.mkStandaloneFlake {
       inherit self;
       name = "tar";
+      smoke = [ "--version" ];
+      smokePattern = "^bsdtar [0-9]+\\.[0-9]+";
 
       # Build via the unpin-llvm engine + emit a bitcode multicall module.
       # The binary is linked as `bsdtar` (libarchive's frontend) and only
