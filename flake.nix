@@ -37,7 +37,10 @@
       #   * bsdtar.1 → tar.1  — the command manual, renamed to match our binary
       #     so `unpin man tar` resolves to it. (Without the rename, the lookup
       #     for "tar" finds the lower-numbered-section-wins `tar.5` archive
-      #     *format* page instead of the command manual.)
+      #     *format* page instead of the command manual.) A `.so` stub goes back
+      #     under the old name at the end: `bsdtar` is announced too — it is what
+      #     macOS and Debian's libarchive-tools call this command — and the
+      #     rename had left it as a name the user can run with nothing to read.
       #   * tar.5, libarchive-formats.5  — the two format pages bsdtar.1's
       #     SEE ALSO cites (and the only ones a tar user consults).
       # Drops libarchive's 34 archive_*.3 / libarchive*.3 C-library API pages
@@ -52,6 +55,7 @@
           ! -path '*/man5/libarchive-formats.5' \
           -delete
         find "$out/share/man" -type d -empty -delete
+        printf '.so man1/tar.1\n' > "$out/share/man/man1/bsdtar.1"
       '';
     in
     unpins-lib.lib.mkStandaloneFlake {
@@ -62,11 +66,15 @@
 
       # Build via the unpin-llvm engine + emit a bitcode multicall module.
       # The binary is linked as `bsdtar` (libarchive's frontend) and only
-      # renamed to `tar` in postInstall, so the capture sidecar — and thus the
-      # program entry — is keyed on `bsdtar`; `tar` rides along as the alias.
+      # renamed to `tar` in postInstall, so the capture sidecar is keyed on
+      # `bsdtar` — which is exactly what `linkName` is for. It used to be the
+      # program's `name`, and `name` is also the applet name, so the entry
+      # symbol and the dispatcher's first-listed name were the build-tree
+      # spelling of a command we ship as `tar`. Same two announced names either
+      # way; `bsdtar` is now the alias it always was in practice.
       engine = "unpin-llvm";
       multicall = {
-        programs = [{ name = "bsdtar"; aliases = [ "tar" ]; }];
+        programs = [{ name = "tar"; linkName = "bsdtar"; aliases = [ "bsdtar" ]; }];
       };
       # Upstream nixpkgs attr is `libarchive`; name it so the engine's stdenv
       # override targets the attr `build` actually uses.
