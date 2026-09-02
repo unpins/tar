@@ -13,7 +13,7 @@ Part of the [unpins](https://unpins.org) catalog; install it with [`unpin`](http
 
 GNU tar (`gnutar`) handles compressed archives by forking to external `gzip` / `xz` / `bzip2` / `zstd` binaries — that breaks the single-binary distribution model. `bsdtar` links zlib / liblzma / libbz2 / libzstd directly and handles every common format in-process.
 
-The CLI is compatible for everyday use (`-c`, `-x`, `-t`, `-z`, `-j`, `-J`, `--zstd`, …). For GNU-tar-specific flags (`--owner=`, `--no-same-owner`, etc.) consult `man bsdtar`.
+The command line is compatible for everyday use (`-c`, `-x`, `-t`, `-z`, `-j`, `-J`, `--zstd`, …). For GNU-tar-specific flags (`--owner=`, `--no-same-owner`, etc.) consult `man bsdtar`.
 
 ## Usage
 
@@ -31,7 +31,7 @@ unpin install tar
 
 ## Man pages
 
-`tar.1` (the bsdtar command manual), `tar.5`, and `libarchive-formats.5` are embedded in the binary — read them with `unpin man tar`. libarchive's C-library API pages (`archive_*.3`) and the man pages for the sibling tools it normally installs (`bsdcat`/`bsdcpio`/`bsdunzip`, which we don't ship) are dropped.
+`tar.1` (the bsdtar command manual), `tar.5`, and `libarchive-formats.5` are embedded in the binary — read them with `unpin man tar`. libarchive's C-library API pages (`archive_*.3`) and the man pages for the sibling programs it normally installs (`bsdcat`/`bsdcpio`/`bsdunzip`, which we don't ship) are dropped.
 
 ## Build locally
 
