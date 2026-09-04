@@ -74,6 +74,8 @@
       # way; `bsdtar` is now the alias it always was in practice.
       engine = "unpin-llvm";
       multicall = {
+        # The `.exe` on the engine too, not the nixpkgs mingw-gcc cross.
+        windows = true;
         programs = [{ name = "tar"; linkName = "bsdtar"; aliases = [ "bsdtar" ]; }];
       };
       # Upstream nixpkgs attr is `libarchive`; name it so the engine's stdenv
