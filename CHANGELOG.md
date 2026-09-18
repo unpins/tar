@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Updated to libarchive 3.8.9.
 - The Windows binary is now built by the same compiler as the Linux and macOS
   ones, and is 7% smaller (1.89 MB to 1.76 MB). Checked on Windows 10: it lists
   and extracts an archive to the same files as the previous binary, and
