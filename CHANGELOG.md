@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [3.8.9-1] - 2026-09-26
+
 ### Changed
 
 - Updated to libarchive 3.8.9.
